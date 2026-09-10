@@ -384,6 +384,7 @@
       font-size: 14px;
       line-height: 1.5;
       word-break: break-word;
+      white-space: pre-wrap;
     }
 
     .message-row.other .message-bubble {
@@ -779,7 +780,7 @@
     /* ==========================================================================
        6. 채팅 기능 (Chat Handlers)
        ========================================================================== */
-    // 메시지 목록 렌더링
+    // 메시지 목록 렌더링 (안전한 DOM 생성 방식: textContent 사용으로 XSS 보안 취약점 방지)
     function renderMessages() {
       chatMessages.innerHTML = '';
 
@@ -789,23 +790,50 @@
 
         if (msg.isMe) {
           row.classList.add('me');
-          row.innerHTML = `
-            <span class="message-time">${escapeHtml(msg.time)}</span>
-            <div class="message-bubble">${escapeHtml(msg.text)}</div>
-          `;
+
+          const timeSpan = document.createElement('span');
+          timeSpan.classList.add('message-time');
+          timeSpan.textContent = msg.time;
+
+          const bubble = document.createElement('div');
+          bubble.classList.add('message-bubble');
+          bubble.textContent = msg.text;
+
+          row.appendChild(timeSpan);
+          row.appendChild(bubble);
         } else {
           row.classList.add('other');
-          const initial = msg.sender ? msg.sender.charAt(0) : '팀';
-          row.innerHTML = `
-            <div class="other-avatar">${escapeHtml(initial)}</div>
-            <div class="message-content-wrapper">
-              <span class="sender-name">${escapeHtml(msg.sender)}</span>
-              <div class="bubble-and-time">
-                <div class="message-bubble">${escapeHtml(msg.text)}</div>
-                <span class="message-time">${escapeHtml(msg.time)}</span>
-              </div>
-            </div>
-          `;
+
+          const avatar = document.createElement('div');
+          avatar.classList.add('other-avatar');
+          avatar.textContent = msg.sender ? msg.sender.charAt(0) : '팀';
+
+          const contentWrapper = document.createElement('div');
+          contentWrapper.classList.add('message-content-wrapper');
+
+          const senderSpan = document.createElement('span');
+          senderSpan.classList.add('sender-name');
+          senderSpan.textContent = msg.sender;
+
+          const bubbleAndTime = document.createElement('div');
+          bubbleAndTime.classList.add('bubble-and-time');
+
+          const bubble = document.createElement('div');
+          bubble.classList.add('message-bubble');
+          bubble.textContent = msg.text;
+
+          const timeSpan = document.createElement('span');
+          timeSpan.classList.add('message-time');
+          timeSpan.textContent = msg.time;
+
+          bubbleAndTime.appendChild(bubble);
+          bubbleAndTime.appendChild(timeSpan);
+
+          contentWrapper.appendChild(senderSpan);
+          contentWrapper.appendChild(bubbleAndTime);
+
+          row.appendChild(avatar);
+          row.appendChild(contentWrapper);
         }
 
         chatMessages.appendChild(row);
