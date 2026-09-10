@@ -414,7 +414,7 @@
       margin-bottom: 2px;
     }
 
-    /* 하단 메시지 입력 바 */
+    /* 하단 메시지 입력 바 & 이모지 피커 */
     .chat-input-bar {
       height: 76px;
       background-color: var(--body-bg);
@@ -423,6 +423,102 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      position: relative;
+    }
+
+    .btn-emoji-toggle {
+      width: 44px;
+      height: 44px;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+      background: #FFFFFF;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .btn-emoji-toggle:hover {
+      background-color: #F3F4F6;
+      border-color: #9CA3AF;
+      transform: scale(1.05);
+    }
+
+    /* 이모지 선택 팝업 */
+    .emoji-picker-popover {
+      display: none;
+      position: absolute;
+      bottom: 84px;
+      left: 24px;
+      background: #FFFFFF;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      z-index: 100;
+      gap: 8px;
+      align-items: center;
+      animation: anim-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .emoji-picker-popover.active {
+      display: flex;
+    }
+
+    .emoji-item {
+      font-size: 24px;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 8px;
+      transition: transform 0.2s ease, background-color 0.2s ease;
+      display: inline-block;
+    }
+
+    .emoji-item:hover {
+      background-color: #F3F4F6;
+      transform: scale(1.3);
+    }
+
+    /* 이모티콘 CSS 애니메이션 */
+    .anim-bounce {
+      display: inline-block;
+      animation: anim-bounce 1s infinite ease-in-out;
+    }
+    .anim-pulse {
+      display: inline-block;
+      animation: anim-pulse 1.2s infinite ease-in-out;
+    }
+    .anim-wiggle {
+      display: inline-block;
+      animation: anim-wiggle 1s infinite ease-in-out;
+    }
+    .anim-spin {
+      display: inline-block;
+      animation: anim-spin 3s infinite linear;
+    }
+
+    @keyframes anim-bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes anim-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); }
+    }
+    @keyframes anim-wiggle {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-12deg); }
+      75% { transform: rotate(12deg); }
+    }
+    @keyframes anim-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes anim-pop {
+      0% { opacity: 0; transform: scale(0.8) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
     }
 
     .chat-input {
@@ -588,6 +684,21 @@
           <!-- JS로 메시지 렌더링 -->
         </div>
         <div class="chat-input-bar">
+          <!-- 애니메이션 이모지 피커 팝업 -->
+          <div id="emoji-picker" class="emoji-picker-popover">
+            <span class="emoji-item anim-bounce" data-emoji="🔥" title="불꽃">🔥</span>
+            <span class="emoji-item anim-pulse" data-emoji="❤️" title="하트">❤️</span>
+            <span class="emoji-item anim-wiggle" data-emoji="🎉" title="축하">🎉</span>
+            <span class="emoji-item anim-bounce" data-emoji="🚀" title="로켓">🚀</span>
+            <span class="emoji-item anim-wiggle" data-emoji="🥳" title="파티">🥳</span>
+            <span class="emoji-item anim-pulse" data-emoji="💡" title="아이디어">💡</span>
+            <span class="emoji-item anim-bounce" data-emoji="😂" title="기쁨">😂</span>
+            <span class="emoji-item anim-spin" data-emoji="⭐" title="별">⭐</span>
+          </div>
+
+          <button id="btn-emoji-toggle" class="btn-emoji-toggle" type="button" title="이모티콘 선택">
+            😊
+          </button>
           <input 
             type="text" 
             id="chat-input" 
@@ -680,6 +791,9 @@
     const chatInput = document.getElementById('chat-input');
     const btnSend = document.getElementById('btn-send');
 
+    const btnEmojiToggle = document.getElementById('btn-emoji-toggle');
+    const emojiPicker = document.getElementById('emoji-picker');
+
     /* ==========================================================================
        3. 유틸리티 함수 (Utilities)
        ========================================================================== */
@@ -694,64 +808,72 @@
       return `${hours}:${formattedMinutes} ${ampm}`;
     }
 
-    // HTML 특수문자 이스케이프 (XSS 방지)
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.innerText = text;
-      return div.innerHTML;
+    // 이모티콘 맵핑 및 안전한 DOM 애니메이션 텍스트 포맷팅 (XSS 방지)
+    const emojiAnimMap = {
+      '🔥': 'anim-bounce',
+      '❤️': 'anim-pulse',
+      '🎉': 'anim-wiggle',
+      '🚀': 'anim-bounce',
+      '🥳': 'anim-wiggle',
+      '💡': 'anim-pulse',
+      '😂': 'anim-bounce',
+      '⭐': 'anim-spin'
+    };
+
+    function appendFormattedText(container, text) {
+      const emojiRegex = /(🔥|❤️|🎉|🚀|🥳|💡|😂|⭐)/g;
+      let lastIndex = 0;
+      let match;
+
+      while ((match = emojiRegex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          container.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+        }
+
+        const emojiChar = match[0];
+        const span = document.createElement('span');
+        span.className = emojiAnimMap[emojiChar] || '';
+        span.textContent = emojiChar;
+        container.appendChild(span);
+
+        lastIndex = emojiRegex.lastIndex;
+      }
+
+      if (lastIndex < text.length) {
+        container.appendChild(document.createTextNode(text.substring(lastIndex)));
+      }
     }
 
     /* ==========================================================================
        4. 인증 관련 핸들러 (Auth Handlers)
        ========================================================================== */
     function handleLogin() {
-      /* ------------------------------------------------------------------------
-         TODO: Supabase 연동 - Google OAuth 로그인
-         예:
-         const { data, error } = await supabase.auth.signInWithOAuth({
-           provider: 'google',
-           options: { redirectTo: window.location.origin }
-         });
-         ------------------------------------------------------------------------ */
-
-      // 임시 게스트 사용자 정보 설정
       currentUser = {
         name: '게스트',
         email: 'guest@company.com'
       };
 
-      // 화면 전환
       loginScreen.style.display = 'none';
       mainScreen.style.display = 'flex';
 
-      // 유저 정보 렌더링
       userNameDisplay.textContent = `${currentUser.name} 님`;
       userAvatar.textContent = currentUser.name.charAt(0);
 
-      // 기본 메뉴(사내 채팅방) 활성화 및 메시지 렌더링
       switchMenu('chat');
       renderMessages();
       chatInput.focus();
 
-      // TODO: Supabase 연동 - 실시간 메시지 구독 시작 (Realtime Subscription)
       initRealtimeSubscription();
     }
 
     function handleLogout() {
-      /* ------------------------------------------------------------------------
-         TODO: Supabase 연동 - 세션 종료 및 실시간 구독 해제
-         예:
-         await supabase.auth.signOut();
-         ------------------------------------------------------------------------ */
-
       currentUser = null;
 
-      // 화면 전환
       mainScreen.style.display = 'none';
       loginScreen.style.display = 'flex';
 
-      // 입력 필드 초기화
       chatInput.value = '';
+      emojiPicker.classList.remove('active');
     }
 
     /* ==========================================================================
@@ -780,7 +902,7 @@
     /* ==========================================================================
        6. 채팅 기능 (Chat Handlers)
        ========================================================================== */
-    // 메시지 목록 렌더링 (안전한 DOM 생성 방식: textContent 사용으로 XSS 보안 취약점 방지)
+    // 메시지 목록 렌더링 (이모티콘 애니메이션 & XSS 보안 방지 적용)
     function renderMessages() {
       chatMessages.innerHTML = '';
 
@@ -797,7 +919,7 @@
 
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
-          bubble.textContent = msg.text;
+          appendFormattedText(bubble, msg.text);
 
           row.appendChild(timeSpan);
           row.appendChild(bubble);
@@ -820,7 +942,7 @@
 
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
-          bubble.textContent = msg.text;
+          appendFormattedText(bubble, msg.text);
 
           const timeSpan = document.createElement('span');
           timeSpan.classList.add('message-time');
@@ -852,14 +974,6 @@
       const text = chatInput.value.trim();
       if (!text) return;
 
-      /* ------------------------------------------------------------------------
-         TODO: Supabase 연동 - messages 테이블에 메시지 저장 (DB Insert)
-         예:
-         const { data, error } = await supabase.from('messages').insert([
-           { sender: currentUser.name, text: text, created_at: new Date() }
-         ]);
-         ------------------------------------------------------------------------ */
-
       const newMsg = {
         id: Date.now(),
         sender: currentUser ? currentUser.name : '게스트',
@@ -868,39 +982,18 @@
         time: formatTime()
       };
 
-      // 로컬 인메모리 배열에 추가
       messages.push(newMsg);
       renderMessages();
 
-      // 인풋창 초기화 및 포커스 복원
       chatInput.value = '';
+      emojiPicker.classList.remove('active');
       chatInput.focus();
     }
 
     /* ==========================================================================
        7. Supabase Realtime Mock 구독
        ========================================================================== */
-    function initRealtimeSubscription() {
-      /* ------------------------------------------------------------------------
-         TODO: Supabase 연동 - Realtime 채널 구독 (postgres_changes)
-         예:
-         supabase
-           .channel('chat-room')
-           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-             const newRow = payload.new;
-             const isMe = newRow.sender === currentUser.name;
-             messages.push({
-               id: newRow.id,
-               sender: newRow.sender,
-               text: newRow.text,
-               isMe: isMe,
-               time: formatTime(new Date(newRow.created_at))
-             });
-             renderMessages();
-           })
-           .subscribe();
-         ------------------------------------------------------------------------ */
-    }
+    function initRealtimeSubscription() {}
 
     /* ==========================================================================
        8. 이벤트 리스너 등록 (Event Listeners)
@@ -915,6 +1008,29 @@
     menuChat.addEventListener('click', () => switchMenu('chat'));
     menuBoard.addEventListener('click', () => switchMenu('board'));
     btnBackChat.addEventListener('click', () => switchMenu('chat'));
+
+    // 이모지 토글 버튼 클릭
+    btnEmojiToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      emojiPicker.classList.toggle('active');
+    });
+
+    // 이모지 선택 클릭
+    emojiPicker.querySelectorAll('.emoji-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const emoji = item.getAttribute('data-emoji');
+        chatInput.value += emoji;
+        emojiPicker.classList.remove('active');
+        chatInput.focus();
+      });
+    });
+
+    // 팝업 외 영역 클릭 시 이모지 피커 닫기
+    document.addEventListener('click', (e) => {
+      if (!emojiPicker.contains(e.target) && e.target !== btnEmojiToggle) {
+        emojiPicker.classList.remove('active');
+      }
+    });
 
     // 전송 버튼 클릭
     btnSend.addEventListener('click', sendMessage);
