@@ -33,7 +33,7 @@
       --text-muted: #6B7280;
       --text-time: #9CA3AF;
       
-      --font-family: "Gungsuh", "GungsuhChe", "궁서", "궁서체", "Batang", serif;
+      --font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "맑은 고딕", "Malgun Gothic", "Noto Sans KR", sans-serif;
     }
 
     * {
@@ -414,34 +414,45 @@
       margin-bottom: 2px;
     }
 
-    /* 동시 영문 번역 라벨 & 구분선 스타일 */
+    /* 다국어(영/일/중) 동시 번역 라벨 & 구분선 스타일 */
     .translation-divider {
-      margin: 8px 0 6px 0;
+      margin: 10px 0 8px 0;
       border: 0;
       border-top: 1px dashed rgba(255, 255, 255, 0.35);
     }
     .message-row.other .translation-divider {
       border-top-color: rgba(153, 27, 27, 0.25);
     }
+    .translation-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
     .translation-box {
-      font-size: 16px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.4;
       opacity: 0.95;
+      display: flex;
+      align-items: flex-start;
     }
     .translation-badge {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      font-size: 11px;
-      padding: 2px 6px;
+      justify-content: center;
+      min-width: 26px;
+      height: 19px;
+      font-size: 10px;
+      padding: 0 4px;
       border-radius: 4px;
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.28);
       color: #FFFFFF;
       font-weight: 700;
-      margin-right: 6px;
+      margin-right: 8px;
+      margin-top: 2px;
+      flex-shrink: 0;
     }
     .message-row.other .translation-badge {
-      background: rgba(153, 27, 27, 0.12);
+      background: rgba(153, 27, 27, 0.15);
       color: #991B1B;
     }
 
@@ -820,7 +831,45 @@
 
     const chatMessages = document.getElementById('chat-messages');
     const chatInput = document.getElementById('chat-input');
-    const btnSend = document.getElementById('btn-send');
+    const btnSend = document.getElementById('btn-send');    // 초기 더미 메시지 목록 (한글, 영문 EN, 일문 JA, 중문 ZH 동시 번역)
+    let messages = [
+      {
+        id: 1,
+        sender: '김철수 팀장',
+        text: '안녕하세요! 이번 주 스프린트 배포 일정 안내드립니다.',
+        translations: {
+          en: 'Hello! Here is the sprint deployment schedule for this week.',
+          ja: 'こんにちは！今週のスプリントデプロイスケジュールをご案内します。',
+          zh: '你好！为你提供本周的迭代发布计划。'
+        },
+        isMe: false,
+        time: '10:30 AM'
+      },
+      {
+        id: 2,
+        sender: '이영희',
+        text: '네 팀장님, 프론트엔드 작업 오늘 중으로 마무리 예정입니다.',
+        translations: {
+          en: 'Yes team leader, frontend work is scheduled to finish today.',
+          ja: 'はいチームリーダー、フロントエンド作業は本日中に完了する予定です。',
+          zh: '好的队长，前端工作预计 today 内完成。'
+        },
+        isMe: false,
+        time: '10:32 AM'
+      },
+      {
+        id: 3,
+        sender: '게스트',
+        text: '확인했습니다! 저도 채팅 UI 프로토타입 구현 완료했습니다.',
+        translations: {
+          en: 'Confirmed! I have also completed the chat UI prototype implementation.',
+          ja: '確認しました！私もチャットUIプロトタイプの実装を完了しました。',
+          zh: '收到！我也完成了聊天 UI 原型的实现。'
+        },
+        isMe: true,
+        time: '10:35 AM'
+      }
+    ];
 
     const btnEmojiToggle = document.getElementById('btn-emoji-toggle');
     const emojiPicker = document.getElementById('emoji-picker');
@@ -876,14 +925,10 @@
       }
     }
 
-    // 한글 ➔ 영문 자동 번역 함수 (MyMemory 무료 API + 폴백)
-    async function translateKoToEn(koText) {
-      if (!/[가-힣]/.test(koText)) {
-        return null; // 한글이 없는 경우 번역 생략
-      }
-
+    // 단일 언어 번역 API 호출
+    async function fetchTranslation(koText, targetLang) {
       try {
-        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(koText)}&langpair=ko|en`);
+        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(koText)}&langpair=ko|${targetLang}`);
         if (response.ok) {
           const data = await response.json();
           if (data && data.responseData && data.responseData.translatedText) {
@@ -891,9 +936,28 @@
           }
         }
       } catch (err) {
-        console.warn('번역 API 호출 예외:', err);
+        console.warn(`${targetLang} 번역 API 예외:`, err);
       }
       return null;
+    }
+
+    // 한글 ➔ 영어(EN), 일본어(JA), 중국어(ZH) 3개국어 동시 번역 함수
+    async function translateMultiLang(koText) {
+      if (!/[가-힣]/.test(koText)) {
+        return null;
+      }
+
+      const [enText, jaText, zhText] = await Promise.all([
+        fetchTranslation(koText, 'en'),
+        fetchTranslation(koText, 'ja'),
+        fetchTranslation(koText, 'zh-CN')
+      ]);
+
+      return {
+        en: enText || null,
+        ja: jaText || null,
+        zh: zhText || null
+      };
     }
 
     /* ==========================================================================
@@ -954,13 +1018,48 @@
     /* ==========================================================================
        6. 채팅 기능 (Chat Handlers)
        ========================================================================== */
-    // 메시지 목록 렌더링 (한글+영문 동시 번역 상자 포함)
+    // 메시지 목록 렌더링 (한글 + 영/일/중 3개국어 동시 번역 출력)
     function renderMessages() {
       chatMessages.innerHTML = '';
 
       messages.forEach(msg => {
         const row = document.createElement('div');
         row.classList.add('message-row');
+
+        // 번역 출력 공통 헬퍼 함수
+        const appendTranslations = (bubbleTarget) => {
+          if (msg.translations && (msg.translations.en || msg.translations.ja || msg.translations.zh)) {
+            const hr = document.createElement('hr');
+            hr.classList.add('translation-divider');
+            bubbleTarget.appendChild(hr);
+
+            const container = document.createElement('div');
+            container.classList.add('translation-container');
+
+            const langItems = [
+              { code: 'EN', text: msg.translations.en },
+              { code: 'JA', text: msg.translations.ja },
+              { code: 'ZH', text: msg.translations.zh }
+            ];
+
+            langItems.forEach(item => {
+              if (item.text) {
+                const transBox = document.createElement('div');
+                transBox.classList.add('translation-box');
+
+                const badge = document.createElement('span');
+                badge.classList.add('translation-badge');
+                badge.textContent = item.code;
+                transBox.appendChild(badge);
+
+                appendFormattedText(transBox, item.text);
+                container.appendChild(transBox);
+              }
+            });
+
+            bubbleTarget.appendChild(container);
+          }
+        };
 
         if (msg.isMe) {
           row.classList.add('me');
@@ -972,24 +1071,7 @@
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
           appendFormattedText(bubble, msg.text);
-
-          // 영문 번역이 있는 경우 추가 표시
-          if (msg.translatedText) {
-            const hr = document.createElement('hr');
-            hr.classList.add('translation-divider');
-            bubble.appendChild(hr);
-
-            const transBox = document.createElement('div');
-            transBox.classList.add('translation-box');
-
-            const badge = document.createElement('span');
-            badge.classList.add('translation-badge');
-            badge.textContent = 'EN';
-            transBox.appendChild(badge);
-
-            appendFormattedText(transBox, msg.translatedText);
-            bubble.appendChild(transBox);
-          }
+          appendTranslations(bubble);
 
           row.appendChild(timeSpan);
           row.appendChild(bubble);
@@ -1013,24 +1095,7 @@
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
           appendFormattedText(bubble, msg.text);
-
-          // 영문 번역이 있는 경우 추가 표시
-          if (msg.translatedText) {
-            const hr = document.createElement('hr');
-            hr.classList.add('translation-divider');
-            bubble.appendChild(hr);
-
-            const transBox = document.createElement('div');
-            transBox.classList.add('translation-box');
-
-            const badge = document.createElement('span');
-            badge.classList.add('translation-badge');
-            badge.textContent = 'EN';
-            transBox.appendChild(badge);
-
-            appendFormattedText(transBox, msg.translatedText);
-            bubble.appendChild(transBox);
-          }
+          appendTranslations(bubble);
 
           const timeSpan = document.createElement('span');
           timeSpan.classList.add('message-time');
@@ -1057,7 +1122,7 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // 새 메시지 전송 (한글 ➔ 영문 동시 번역 처리)
+    // 새 메시지 전송 (한글 ➔ 영어, 일본어, 중국어 3개국어 동시 번역 처리)
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
@@ -1066,7 +1131,7 @@
         id: Date.now(),
         sender: currentUser ? currentUser.name : '게스트',
         text: text,
-        translatedText: null,
+        translations: null,
         isMe: true,
         time: formatTime()
       };
@@ -1079,11 +1144,11 @@
       emojiPicker.classList.remove('active');
       chatInput.focus();
 
-      // 2. 한글이 포함된 경우 실시간 영문 번역 실행 후 렌더링 업데이트
+      // 2. 한글이 포함된 경우 실시간 3개국어 동시 번역 실행 후 렌더링 업데이트
       if (/[가-힣]/.test(text)) {
-        const enText = await translateKoToEn(text);
-        if (enText) {
-          newMsg.translatedText = enText;
+        const transResult = await translateMultiLang(text);
+        if (transResult && (transResult.en || transResult.ja || transResult.zh)) {
+          newMsg.translations = transResult;
           renderMessages();
         }
       }
