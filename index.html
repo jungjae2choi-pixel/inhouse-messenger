@@ -414,6 +414,37 @@
       margin-bottom: 2px;
     }
 
+    /* 동시 영문 번역 라벨 & 구분선 스타일 */
+    .translation-divider {
+      margin: 8px 0 6px 0;
+      border: 0;
+      border-top: 1px dashed rgba(255, 255, 255, 0.35);
+    }
+    .message-row.other .translation-divider {
+      border-top-color: rgba(153, 27, 27, 0.25);
+    }
+    .translation-box {
+      font-size: 16px;
+      line-height: 1.5;
+      opacity: 0.95;
+    }
+    .translation-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.25);
+      color: #FFFFFF;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .message-row.other .translation-badge {
+      background: rgba(153, 27, 27, 0.12);
+      color: #991B1B;
+    }
+
     /* 하단 메시지 입력 바 & 이모지 피커 */
     .chat-input-bar {
       height: 76px;
@@ -821,6 +852,7 @@
     };
 
     function appendFormattedText(container, text) {
+      if (!text) return;
       const emojiRegex = /(🔥|❤️|🎉|🚀|🥳|💡|😂|⭐)/g;
       let lastIndex = 0;
       let match;
@@ -842,6 +874,26 @@
       if (lastIndex < text.length) {
         container.appendChild(document.createTextNode(text.substring(lastIndex)));
       }
+    }
+
+    // 한글 ➔ 영문 자동 번역 함수 (MyMemory 무료 API + 폴백)
+    async function translateKoToEn(koText) {
+      if (!/[가-힣]/.test(koText)) {
+        return null; // 한글이 없는 경우 번역 생략
+      }
+
+      try {
+        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(koText)}&langpair=ko|en`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.responseData && data.responseData.translatedText) {
+            return data.responseData.translatedText;
+          }
+        }
+      } catch (err) {
+        console.warn('번역 API 호출 예외:', err);
+      }
+      return null;
     }
 
     /* ==========================================================================
@@ -902,7 +954,7 @@
     /* ==========================================================================
        6. 채팅 기능 (Chat Handlers)
        ========================================================================== */
-    // 메시지 목록 렌더링 (이모티콘 애니메이션 & XSS 보안 방지 적용)
+    // 메시지 목록 렌더링 (한글+영문 동시 번역 상자 포함)
     function renderMessages() {
       chatMessages.innerHTML = '';
 
@@ -920,6 +972,24 @@
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
           appendFormattedText(bubble, msg.text);
+
+          // 영문 번역이 있는 경우 추가 표시
+          if (msg.translatedText) {
+            const hr = document.createElement('hr');
+            hr.classList.add('translation-divider');
+            bubble.appendChild(hr);
+
+            const transBox = document.createElement('div');
+            transBox.classList.add('translation-box');
+
+            const badge = document.createElement('span');
+            badge.classList.add('translation-badge');
+            badge.textContent = 'EN';
+            transBox.appendChild(badge);
+
+            appendFormattedText(transBox, msg.translatedText);
+            bubble.appendChild(transBox);
+          }
 
           row.appendChild(timeSpan);
           row.appendChild(bubble);
@@ -943,6 +1013,24 @@
           const bubble = document.createElement('div');
           bubble.classList.add('message-bubble');
           appendFormattedText(bubble, msg.text);
+
+          // 영문 번역이 있는 경우 추가 표시
+          if (msg.translatedText) {
+            const hr = document.createElement('hr');
+            hr.classList.add('translation-divider');
+            bubble.appendChild(hr);
+
+            const transBox = document.createElement('div');
+            transBox.classList.add('translation-box');
+
+            const badge = document.createElement('span');
+            badge.classList.add('translation-badge');
+            badge.textContent = 'EN';
+            transBox.appendChild(badge);
+
+            appendFormattedText(transBox, msg.translatedText);
+            bubble.appendChild(transBox);
+          }
 
           const timeSpan = document.createElement('span');
           timeSpan.classList.add('message-time');
@@ -969,8 +1057,8 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // 새 메시지 전송
-    function sendMessage() {
+    // 새 메시지 전송 (한글 ➔ 영문 동시 번역 처리)
+    async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
 
@@ -978,16 +1066,27 @@
         id: Date.now(),
         sender: currentUser ? currentUser.name : '게스트',
         text: text,
+        translatedText: null,
         isMe: true,
         time: formatTime()
       };
 
+      // 1. 메시지 우선 렌더링
       messages.push(newMsg);
       renderMessages();
 
       chatInput.value = '';
       emojiPicker.classList.remove('active');
       chatInput.focus();
+
+      // 2. 한글이 포함된 경우 실시간 영문 번역 실행 후 렌더링 업데이트
+      if (/[가-힣]/.test(text)) {
+        const enText = await translateKoToEn(text);
+        if (enText) {
+          newMsg.translatedText = enText;
+          renderMessages();
+        }
+      }
     }
 
     /* ==========================================================================
