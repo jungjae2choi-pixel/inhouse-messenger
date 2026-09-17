@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>사내 메신저</title>
+  <!-- 구글 로그인 공식 SDK (Google Identity Services) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     /* ==========================================================================
        CSS Variables & Global Reset
@@ -267,6 +269,14 @@
       justify-content: center;
       font-size: 14px;
       font-weight: 700;
+      overflow: hidden;
+    }
+
+    .user-avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
     }
 
     .user-name {
@@ -935,19 +945,97 @@
     }
 
     /* ==========================================================================
-       4. 인증 관련 핸들러 (Auth Handlers)
+       4. 구글 로그인 & 인증 핸들러 (Google OAuth & Auth Handlers)
        ========================================================================== */
+    // 구글 클라이언트 ID 설정 (Google Cloud Console에서 발급받은 ID 입력 가능)
+    const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
+
+    // 구글 ID 토큰(JWT) 디코딩 헬퍼 함수
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error('JWT 디코딩 실패:', e);
+        return null;
+      }
+    }
+
+    // 구글 팝업/원클릭 인증 완료 시 호출되는 콜백
+    function handleGoogleCredentialResponse(response) {
+      /* ------------------------------------------------------------------------
+         TODO: Supabase 연동 - 구글 OAuth 세션 처리
+         예:
+         const { data, error } = await supabase.auth.signInWithIdToken({
+           provider: 'google',
+           token: response.credential
+         });
+         ------------------------------------------------------------------------ */
+      const payload = parseJwt(response.credential);
+      if (payload) {
+        currentUser = {
+          name: payload.name || payload.email.split('@')[0],
+          email: payload.email,
+          picture: payload.picture
+        };
+        completeLogin();
+      }
+    }
+
+    // 구글 SDK 초기화 (페이지 로드 시 준비)
+    window.addEventListener('load', () => {
+      if (window.google && window.google.accounts && GOOGLE_CLIENT_ID !== "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com") {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredentialResponse
+        });
+      }
+    });
+
+    // 구글 로그인 버튼 클릭 시 실행
     function handleLogin() {
+      /* ------------------------------------------------------------------------
+         TODO: Supabase 연동 - Google OAuth 로그인
+         예:
+         await supabase.auth.signInWithOAuth({ provider: 'google' });
+         ------------------------------------------------------------------------ */
+
+      // 1. 실제 Google Client ID가 등록된 경우 구글 원클릭/팝업 창 호출
+      if (window.google && window.google.accounts && GOOGLE_CLIENT_ID !== "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com") {
+        google.accounts.id.prompt();
+        return;
+      }
+
+      // 2. Client ID 미설정 시: 구글 계정 정보를 직접 입력받아 구글 계정으로 로그인 처리
+      const userEmail = prompt("구글 계정 이메일을 입력하세요 (예: user@gmail.com):", "user@gmail.com");
+      if (userEmail === null) return; // 취소 선택 시
+
+      const defaultName = userEmail.split('@')[0];
+      const userName = prompt("구글 계정 프로필 이름을 입력하세요:", defaultName) || defaultName;
+
       currentUser = {
-        name: '게스트',
-        email: 'guest@company.com'
+        name: userName,
+        email: userEmail,
+        picture: null
       };
 
+      completeLogin();
+    }
+
+    // 로그인 완료 공통 처리 (프로필 이미지 및 이메일 반영)
+    function completeLogin() {
       loginScreen.style.display = 'none';
       mainScreen.style.display = 'flex';
 
       userNameDisplay.textContent = `${currentUser.name} 님`;
-      userAvatar.textContent = currentUser.name.charAt(0);
+
+      if (currentUser.picture) {
+        userAvatar.innerHTML = `<img src="${currentUser.picture}" alt="Google Avatar" class="user-avatar-img">`;
+      } else {
+        userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+      }
 
       switchMenu('chat');
       renderMessages();
@@ -957,6 +1045,11 @@
     }
 
     function handleLogout() {
+      /* ------------------------------------------------------------------------
+         TODO: Supabase 연동 - 로그아웃 / 세션 종료
+         예:
+         await supabase.auth.signOut();
+         ------------------------------------------------------------------------ */
       currentUser = null;
 
       mainScreen.style.display = 'none';
